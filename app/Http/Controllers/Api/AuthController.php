@@ -1,0 +1,346 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Models\Business;
+use App\Models\Patient;
+use App\Models\Doctor;
+use App\Models\Therapist;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class AuthController extends Controller
+{
+    public function setupBusiness(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            // Business Information
+            'business_name' => 'required|string|max:255',
+            'business_type' => 'required|in:healthcare,clinic,hospital,therapy_center',
+            'business_email' => 'required|string|email|max:255|unique:businesses,email',
+            'business_phone' => 'nullable|string|max:20',
+            'business_address' => 'nullable|string',
+            'business_website' => 'nullable|url',
+            'license_number' => 'nullable|string|max:255',
+
+            // Owner Information
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:8|confirmed',
+            'phone' => 'nullable|string|max:20',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:male,female,other',
+
+            // Subscription
+            'subscription_plan' => 'required|in:free,basic,premium,enterprise',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Create the business
+            $business = Business::create([
+                'name' => $request->business_name,
+                'business_type' => $request->business_type,
+                'email' => $request->business_email,
+                'phone' => $request->business_phone,
+                'address' => $request->business_address,
+                'website' => $request->business_website,
+                'license_number' => $request->license_number,
+                'subscription_plan' => $request->subscription_plan,
+                'subscription_expires_at' => $request->subscription_plan !== 'free' ? now()->addYear() : null,
+                'is_active' => true,
+            ]);
+
+            // Create the business owner
+            $owner = User::create([
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role' => 'admin',
+                'phone' => $request->phone,
+                'date_of_birth' => $request->date_of_birth,
+                'gender' => $request->gender,
+                'business_id' => $business->id,
+                'is_business_owner' => true,
+                'is_active' => true,
+            ]);
+
+            $token = $owner->createToken('auth_token')->plainTextToken;
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Business setup successful',
+                'business' => $business,
+                'user' => $owner,
+                'token' => $token
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'message' => 'Business setup failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function register(Request $request)
+    {
+        // Check if this is a business registration (has business info) or staff registration
+        $isBusinessRegistration = $request->has('business_name');
+
+        if ($isBusinessRegistration) {
+            // Business registration with owner information
+            $validator = Validator::make($request->all(), [
+                // Business Information
+                'business_name' => 'required|string|max:255',
+                'business_type' => 'required|in:healthcare,clinic,hospital,therapy_center',
+                'business_email' => 'required|string|email|max:255|unique:businesses,email',
+                'business_phone' => 'nullable|string|max:20',
+                'business_address' => 'nullable|string',
+                'business_website' => 'nullable|url',
+                'license_number' => 'nullable|string|max:255',
+                'subscription_plan' => 'nullable|in:free,basic,premium,enterprise',
+
+                // Owner Information
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'email' => 'required|string|email|max:255|unique:users',
+                'password' => 'required|string|min:8|confirmed',
+                'phone' => 'nullable|string|max:20',
+                'date_of_birth' => 'nullable|date',
+                'gender' => 'nullable|in:male,female,other',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            try {
+                DB::beginTransaction();
+
+                // Create the business
+                $business = Business::create([
+                    'name' => $request->business_name,
+                    'business_type' => $request->business_type,
+                    'email' => $request->business_email,
+                    'phone' => $request->business_phone,
+                    'address' => $request->business_address,
+                    'website' => $request->business_website,
+                    'license_number' => $request->license_number,
+                    'subscription_plan' => $request->subscription_plan ?? 'free',
+                    'subscription_expires_at' => ($request->subscription_plan ?? 'free') !== 'free' ? now()->addYear() : null,
+                    'is_active' => true,
+                ]);
+
+                // Create the business owner
+                $user = User::create([
+                    'first_name' => $request->first_name,
+                    'last_name' => $request->last_name,
+                    'email' => $request->email,
+                    'password' => Hash::make($request->password),
+                    'role' => 'admin',
+                    'phone' => $request->phone,
+                    'date_of_birth' => $request->date_of_birth,
+                    'gender' => $request->gender,
+                    'business_id' => $business->id,
+                    'is_business_owner' => true,
+                    'is_active' => true,
+                ]);
+
+                $token = $user->createToken('auth_token')->plainTextToken;
+
+                DB::commit();
+
+                return response()->json([
+                    'message' => 'Business registration successful',
+                    'business' => $business,
+                    'user' => $user,
+                    'token' => $token
+                ], 201);
+
+            } catch (\Exception $e) {
+                DB::rollback();
+                return response()->json([
+                    'message' => 'Business registration failed',
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+        } else {
+            // Staff registration for existing business
+            $validator = Validator::make($request->all(), [
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'email' => 'required|string|email|max:255|unique:users',
+                'password' => 'required|string|min:8|confirmed',
+                'role' => 'required|in:admin,doctor,nurse,therapist,patient,receptionist',
+                'phone' => 'nullable|string|max:20',
+                'date_of_birth' => 'nullable|date',
+                'gender' => 'nullable|in:male,female,other',
+                'business_id' => 'required|exists:businesses,id',
+                'specialization' => 'nullable|string',
+                'qualifications' => 'nullable|string',
+                'years_of_experience' => 'nullable|integer|min:0',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = User::create([
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role' => $request->role,
+                'phone' => $request->phone,
+                'date_of_birth' => $request->date_of_birth,
+                'gender' => $request->gender,
+                'business_id' => $request->business_id,
+                'specialization' => $request->specialization,
+                'qualifications' => $request->qualifications,
+                'years_of_experience' => $request->years_of_experience,
+            ]);
+
+            // Create role-specific records
+            if ($user->role === 'patient') {
+                Patient::create([
+                    'user_id' => $user->id,
+                    'business_id' => $user->business_id,
+                    'patient_id' => 'PAT' . str_pad($user->id, 6, '0', STR_PAD_LEFT),
+                ]);
+            } elseif ($user->role === 'doctor') {
+                Doctor::create([
+                    'user_id' => $user->id,
+                    'business_id' => $user->business_id,
+                    'license_number' => 'DOC' . str_pad($user->id, 6, '0', STR_PAD_LEFT),
+                    'specialization' => $request->specialization ?? 'General Practice',
+                ]);
+            } elseif ($user->role === 'therapist') {
+                Therapist::create([
+                    'user_id' => $user->id,
+                    'business_id' => $user->business_id,
+                    'license_number' => 'THR' . str_pad($user->id, 6, '0', STR_PAD_LEFT),
+                    'specialization' => $request->specialization ?? 'Physical Therapy',
+                    'qualifications' => $request->qualifications ?? '',
+                    'years_of_experience' => $request->years_of_experience ?? 0,
+                ]);
+            }
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'message' => 'Staff registration successful',
+                'user' => $user->load('business'),
+                'token' => $token
+            ], 201);
+        }
+    }
+
+    public function login(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = User::with('business')->where('email', $request->email)->first();
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'message' => 'Invalid credentials'
+            ], 401);
+        }
+
+        if (!$user->is_active) {
+            return response()->json([
+                'message' => 'Account is inactive. Please contact administrator.'
+            ], 401);
+        }
+
+        // Check if business is active
+        if ($user->business && !$user->business->is_active) {
+            return response()->json([
+                'message' => 'Business account is inactive. Please contact support.'
+            ], 401);
+        }
+
+        // Check subscription status
+        if ($user->business && !$user->business->isSubscriptionActive()) {
+            return response()->json([
+                'message' => 'Business subscription has expired. Please renew to continue.'
+            ], 401);
+        }
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Login successful',
+            'user' => $user,
+            'business' => $user->business,
+            'token' => $token
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json([
+            'message' => 'Logged out successfully'
+        ]);
+    }
+
+    public function me(Request $request)
+    {
+        $user = $request->user()->load('business');
+
+        return response()->json([
+            'user' => $user,
+            'business' => $user->business
+        ]);
+    }
+
+    public function refresh(Request $request)
+    {
+        $user = $request->user();
+        $user->currentAccessToken()->delete();
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Token refreshed successfully',
+            'token' => $token
+        ]);
+    }
+}
