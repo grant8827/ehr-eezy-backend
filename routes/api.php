@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\MedicalRecordController;
 use App\Http\Controllers\Api\BillController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\TelehealthController;
+use App\Http\Controllers\Api\EmailController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -65,6 +66,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('telehealth', TelehealthController::class);
     Route::post('telehealth/{session}/start', [TelehealthController::class, 'startSession']);
     Route::post('telehealth/{session}/end', [TelehealthController::class, 'endSession']);
+
+    // Email routes
+    Route::prefix('emails')->group(function () {
+        Route::post('patient-invitation', [EmailController::class, 'sendPatientInvitation']);
+        Route::post('appointment-reminder', [EmailController::class, 'sendAppointmentReminder']);
+        Route::post('billing-notification', [EmailController::class, 'sendBillingNotification']);
+        Route::post('custom', [EmailController::class, 'sendCustomEmail']);
+        Route::post('test-smtp', [EmailController::class, 'testSmtpConfiguration']);
+        Route::get('templates', [EmailController::class, 'getEmailTemplates']);
+    });
 
     // Dashboard routes
     Route::get('dashboard/stats', function (Request $request) {
