@@ -22,10 +22,14 @@ class User extends Authenticatable
         'first_name',
         'last_name',
         'email',
+        'email_verified_at',
         'password',
         'role',
         'phone',
         'address',
+        'city',
+        'state',
+        'zip_code',
         'date_of_birth',
         'gender',
         'is_active',
@@ -38,7 +42,10 @@ class User extends Authenticatable
         'specialization',
         'qualifications',
         'years_of_experience',
-        'profile_image',
+        'profile_picture',
+        'notification_preferences',
+        'deactivated_at',
+        'deactivation_reason',
     ];
 
     /**
@@ -66,6 +73,8 @@ class User extends Authenticatable
             'is_business_owner' => 'boolean',
             'invitation_sent_at' => 'datetime',
             'invitation_accepted_at' => 'datetime',
+            'deactivated_at' => 'datetime',
+            'notification_preferences' => 'array',
         ];
     }
 
@@ -151,5 +160,15 @@ class User extends Authenticatable
     public function scopePatients($query)
     {
         return $query->where('role', 'patient');
+    }
+
+    // Accessor for profile picture URL
+    public function getProfilePictureUrlAttribute()
+    {
+        if (!$this->profile_picture) {
+            return null;
+        }
+
+        return asset('storage/' . $this->profile_picture);
     }
 }

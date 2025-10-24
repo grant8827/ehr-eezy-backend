@@ -10,6 +10,7 @@ class Patient extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'business_id',
         'created_by',
         'patient_id',
@@ -97,6 +98,21 @@ class Patient extends Model
     public function prescriptions()
     {
         return $this->hasMany(Prescription::class);
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(MedicalDocument::class);
+    }
+
+    public function vitalSigns()
+    {
+        return $this->hasMany(VitalSigns::class);
+    }
+
+    public function labResults()
+    {
+        return $this->hasMany(LabResult::class);
     }
 
     // Accessors

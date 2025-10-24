@@ -343,4 +343,219 @@ class AuthController extends Controller
             'token' => $token
         ]);
     }
+
+    public function updateProfile(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'first_name' => 'sometimes|required|string|max:255',
+            'last_name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|email|unique:users,email,' . $request->user()->id,
+            'phone' => 'nullable|string|max:20',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:male,female,other,prefer_not_to_say',
+            'address' => 'nullable|string|max:500',
+            'city' => 'nullable|string|max:100',
+            'state' => 'nullable|string|max:100',
+            'zip_code' => 'nullable|string|max:20',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = $request->user();
+            $user->update($request->only([
+                'first_name', 'last_name', 'email', 'phone', 'date_of_birth',
+                'gender', 'address', 'city', 'state', 'zip_code'
+            ]));
+
+            return response()->json([
+                'message' => 'Profile updated successfully',
+                'user' => $user->fresh()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to update profile',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function changePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = $request->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'message' => 'Current password is incorrect'
+            ], 422);
+        }
+
+        try {
+            $user->update([
+                'password' => Hash::make($request->new_password)
+            ]);
+
+            return response()->json([
+                'message' => 'Password changed successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to change password',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function uploadProfilePicture(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'profile_picture' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048', // 2MB max
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = $request->user();
+
+            // Delete old profile picture if exists
+            if ($user->profile_picture) {
+                $oldPath = storage_path('app/public/' . $user->profile_picture);
+                if (file_exists($oldPath)) {
+                    unlink($oldPath);
+                }
+            }
+
+            // Store the new profile picture
+            $file = $request->file('profile_picture');
+            $fileName = time() . '_' . $user->id . '.' . $file->getClientOriginalExtension();
+            $filePath = $file->storeAs('profile-pictures', $fileName, 'public');
+
+            // Update user's profile picture path
+            $user->update([
+                'profile_picture' => $filePath
+            ]);
+
+            return response()->json([
+                'message' => 'Profile picture uploaded successfully',
+                'user' => $user->fresh(),
+                'profile_picture_url' => asset('storage/' . $filePath)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to upload profile picture',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function updateNotificationPreferences(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email_appointments' => 'boolean',
+            'email_reminders' => 'boolean',
+            'email_results' => 'boolean',
+            'sms_appointments' => 'boolean',
+            'sms_reminders' => 'boolean',
+            'push_notifications' => 'boolean',
+            'marketing_emails' => 'boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = $request->user();
+
+            // Update notification preferences (you might want to store this in a separate table)
+            $preferences = $request->only([
+                'email_appointments', 'email_reminders', 'email_results',
+                'sms_appointments', 'sms_reminders', 'push_notifications', 'marketing_emails'
+            ]);
+
+            // For now, store in user table. Later you might create a separate notification_preferences table
+            $user->update([
+                'notification_preferences' => json_encode($preferences)
+            ]);
+
+            return response()->json([
+                'message' => 'Notification preferences updated successfully',
+                'preferences' => $preferences
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to update notification preferences',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deactivateAccount(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'password' => 'required|string',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = $request->user();
+
+        if (!Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'message' => 'Password is incorrect'
+            ], 422);
+        }
+
+        try {
+            // Deactivate the account
+            $user->update([
+                'is_active' => false,
+                'deactivated_at' => now(),
+                'deactivation_reason' => $request->reason
+            ]);
+
+            // Revoke all tokens
+            $user->tokens()->delete();
+
+            return response()->json([
+                'message' => 'Account deactivated successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to deactivate account',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

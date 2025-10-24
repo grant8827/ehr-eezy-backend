@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\Patient;
 use App\Models\Appointment;
 use App\Models\Bill;
+use App\Mail\PatientInvitationMail;
 
 class EmailController extends Controller
 {
@@ -46,19 +47,19 @@ class EmailController extends Controller
                 'patient_name' => $patient->first_name . ' ' . $patient->last_name,
                 'business_name' => $user->business->name ?? 'EHR Eezy',
                 'message' => $request->message ?? 'You have been invited to access our patient portal.',
-                'portal_url' => $request->portal_url ?? url('/patient-portal'),
+                'portal_url' => $request->portal_url ?? env('FRONTEND_URL', 'https://ehr-eezy.up.railway.app') . '/patient-setup',
                 'contact_email' => $user->email,
             ];
 
-            // For now, we'll just log the email (in production, use Mail facade)
-            \Log::info('Patient invitation email would be sent:', [
+            // Send the actual email
+            Mail::to($patient->email)->send(new PatientInvitationMail($emailData));
+
+            // Log for debugging
+            \Log::info('Patient invitation email sent successfully:', [
                 'to' => $patient->email,
                 'subject' => 'Patient Portal Invitation',
                 'data' => $emailData
             ]);
-
-            // TODO: Implement actual email sending with Mail facade
-            // Mail::to($patient->email)->send(new PatientInvitationMail($emailData));
 
             return response()->json([
                 'success' => true,
@@ -289,37 +290,34 @@ class EmailController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'test_email' => 'required|email',
-                'smtp_host' => 'required|string',
-                'smtp_port' => 'required|integer',
-                'smtp_username' => 'required|string',
-                'smtp_password' => 'required|string',
-                'smtp_encryption' => 'nullable|in:tls,ssl',
             ]);
 
             if ($validator->fails()) {
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            // For now, just validate the configuration and log it
-            // In production, you would actually test the SMTP connection
-
-            $smtpConfig = [
-                'host' => $request->smtp_host,
-                'port' => $request->smtp_port,
-                'username' => $request->smtp_username,
-                'encryption' => $request->smtp_encryption ?? 'tls',
+            // Send a test email to verify SMTP configuration
+            $user = auth()->user();
+            $testData = [
+                'patient_name' => 'Test User',
+                'business_name' => 'EHR Eezy Test',
+                'message' => 'This is a test email to verify your SMTP configuration is working correctly.',
+                'portal_url' => env('FRONTEND_URL', 'https://ehr-eezy.up.railway.app') . '/patient-setup',
+                'contact_email' => $user->email ?? 'noreply@ehreezy.com',
             ];
 
-            \Log::info('SMTP configuration test:', [
-                'config' => $smtpConfig,
-                'test_email' => $request->test_email
+            Mail::to($request->test_email)->send(new PatientInvitationMail($testData));
+
+            \Log::info('SMTP configuration test email sent:', [
+                'to' => $request->test_email,
+                'from' => config('mail.from.address'),
             ]);
 
-            // Simulate successful test
             return response()->json([
                 'success' => true,
-                'message' => 'SMTP configuration test successful',
-                'test_email_sent' => true
+                'message' => 'SMTP configuration test successful! Check your email.',
+                'test_email_sent' => true,
+                'recipient' => $request->test_email
             ]);
         } catch (\Exception $e) {
             \Log::error('SMTP test error:', [
