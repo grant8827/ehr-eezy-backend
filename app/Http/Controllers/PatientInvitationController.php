@@ -426,8 +426,8 @@ class PatientInvitationController extends Controller
                 'patient_id' => $patient->id
             ]);
 
-            // Generate JWT token for automatic login
-            $token = auth('api')->login($user);
+            // Generate Sanctum token for automatic login
+            $token = $user->createToken('patient-registration')->plainTextToken;
 
             return response()->json([
                 'success' => true,
