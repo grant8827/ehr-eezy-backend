@@ -109,6 +109,11 @@ class User extends Authenticatable
         return $this->role === 'therapist';
     }
 
+    public function isPharmacy()
+    {
+        return $this->role === 'pharmacy';
+    }
+
     public function isStaff()
     {
         return in_array($this->role, ['admin', 'doctor', 'nurse', 'therapist', 'receptionist']);
@@ -128,6 +133,11 @@ class User extends Authenticatable
     public function therapistProfile()
     {
         return $this->hasOne(Therapist::class);
+    }
+
+    public function pharmacy()
+    {
+        return $this->hasOne(Pharmacy::class);
     }
 
     public function sentMessages()

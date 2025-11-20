@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\MedicalRecordController;
 use App\Http\Controllers\Api\VitalSignsController;
 use App\Http\Controllers\Api\LabResultController;
 use App\Http\Controllers\Api\PrescriptionController;
+use App\Http\Controllers\Api\PharmacyController;
 use App\Http\Controllers\Api\MedicalDocumentController;
 use App\Http\Controllers\Api\BillController;
 use App\Http\Controllers\Api\MessageController;
@@ -115,6 +116,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('prescriptions/active', [PrescriptionController::class, 'activeList']);
     Route::get('prescriptions/expiring', [PrescriptionController::class, 'expiringList']);
     Route::post('prescriptions/{prescription}/refill', [PrescriptionController::class, 'refill']);
+    Route::post('prescriptions/{prescription}/send-to-pharmacy', [PrescriptionController::class, 'sendToPharmacy']);
+
+    // Pharmacy routes
+    Route::apiResource('pharmacies', PharmacyController::class);
+    Route::get('pharmacies/nearby', [PharmacyController::class, 'nearby']);
+    Route::get('pharmacies/{pharmacy}/prescriptions', [PharmacyController::class, 'prescriptions']);
+    Route::patch('pharmacies/{pharmacy}/prescriptions/{prescription}/status', [PharmacyController::class, 'updatePrescriptionStatus']);
 
     // Medical Documents routes
     Route::apiResource('medical-documents', MedicalDocumentController::class);

@@ -15,6 +15,7 @@ class Prescription extends Model
         'prescribed_by',
         'appointment_id',
         'business_id',
+        'pharmacy_id',
         'medication_name',
         'generic_name',
         'strength',
@@ -26,7 +27,11 @@ class Prescription extends Model
         'refills',
         'refills_remaining',
         'status',
+        'pharmacy_status',
         'prescribed_at',
+        'sent_to_pharmacy_at',
+        'filled_at',
+        'picked_up_at',
         'start_date',
         'end_date',
         'pharmacy_name',
@@ -42,6 +47,9 @@ class Prescription extends Model
 
     protected $casts = [
         'prescribed_at' => 'datetime',
+        'sent_to_pharmacy_at' => 'datetime',
+        'filled_at' => 'datetime',
+        'picked_up_at' => 'datetime',
         'start_date' => 'date',
         'end_date' => 'date',
         'refills' => 'integer',
@@ -70,6 +78,11 @@ class Prescription extends Model
     public function business()
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function pharmacy()
+    {
+        return $this->belongsTo(Pharmacy::class);
     }
 
     // Accessors
