@@ -64,6 +64,11 @@ class Pharmacy extends Model
         return $this->hasMany(Prescription::class);
     }
 
+    public function staff()
+    {
+        return $this->hasMany(PharmacyStaff::class);
+    }
+
     // Scopes
     public function scopeActive($query)
     {

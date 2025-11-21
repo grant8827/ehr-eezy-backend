@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\VitalSignsController;
 use App\Http\Controllers\Api\LabResultController;
 use App\Http\Controllers\Api\PrescriptionController;
 use App\Http\Controllers\Api\PharmacyController;
+use App\Http\Controllers\Api\PharmacyStaffController;
 use App\Http\Controllers\Api\MedicalDocumentController;
 use App\Http\Controllers\Api\BillController;
 use App\Http\Controllers\Api\MessageController;
@@ -123,6 +124,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('pharmacies/nearby', [PharmacyController::class, 'nearby']);
     Route::get('pharmacies/{pharmacy}/prescriptions', [PharmacyController::class, 'prescriptions']);
     Route::patch('pharmacies/{pharmacy}/prescriptions/{prescription}/status', [PharmacyController::class, 'updatePrescriptionStatus']);
+
+    // Pharmacy Staff routes
+    Route::apiResource('pharmacy-staff', PharmacyStaffController::class);
+    Route::get('pharmacies/{pharmacy}/staff', [PharmacyStaffController::class, 'byPharmacy']);
+    Route::get('pharmacy-staff/expiring-licenses', [PharmacyStaffController::class, 'expiringLicenses']);
+    Route::patch('pharmacy-staff/{id}/status', [PharmacyStaffController::class, 'updateStatus']);
 
     // Medical Documents routes
     Route::apiResource('medical-documents', MedicalDocumentController::class);
