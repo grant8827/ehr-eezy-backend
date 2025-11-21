@@ -288,18 +288,23 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // Check if business is active
-        if ($user->business && !$user->business->is_active) {
+        // Check if business is active (skip for pharmacy users)
+        if (!$user->isPharmacy() && $user->business && !$user->business->is_active) {
             return response()->json([
                 'message' => 'Business account is inactive. Please contact support.'
             ], 401);
         }
 
-        // Check subscription status
-        if ($user->business && !$user->business->isSubscriptionActive()) {
+        // Check subscription status (skip for pharmacy users)
+        if (!$user->isPharmacy() && $user->business && !$user->business->isSubscriptionActive()) {
             return response()->json([
                 'message' => 'Business subscription has expired. Please renew to continue.'
             ], 401);
+        }
+
+        // Load pharmacy relationship for pharmacy users
+        if ($user->isPharmacy()) {
+            $user->load('pharmacy');
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -308,6 +313,7 @@ class AuthController extends Controller
             'message' => 'Login successful',
             'user' => $user,
             'business' => $user->business,
+            'pharmacy' => $user->isPharmacy() ? $user->pharmacy : null,
             'token' => $token
         ]);
     }
