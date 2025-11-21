@@ -297,8 +297,8 @@ class PrescriptionController extends Controller
         if (!$prescription->canBeRefilled()) {
             return response()->json([
                 'message' => 'Prescription cannot be refilled',
-                'reason' => $prescription->refills_remaining <= 0 
-                    ? 'No refills remaining' 
+                'reason' => $prescription->refills_remaining <= 0
+                    ? 'No refills remaining'
                     : 'Prescription is not active'
             ], 400);
         }

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->timestamp('sent_to_pharmacy_at')->nullable()->after('prescribed_at');
             $table->timestamp('filled_at')->nullable()->after('sent_to_pharmacy_at');
             $table->timestamp('picked_up_at')->nullable()->after('filled_at');
-            
+
             $table->foreign('pharmacy_id')->references('id')->on('pharmacies')->onDelete('set null');
         });
     }

@@ -57,7 +57,7 @@ class PharmacyStaff extends Model
         if (!$this->license_expiry) {
             return false;
         }
-        
+
         return $this->license_expiry <= now()->addDays($days);
     }
 

@@ -153,7 +153,7 @@ class PharmacyStaffController extends Controller
     public function byPharmacy($pharmacyId)
     {
         $pharmacy = Pharmacy::findOrFail($pharmacyId);
-        
+
         $staff = PharmacyStaff::forPharmacy($pharmacyId)
             ->orderBy('role')
             ->orderBy('last_name')
@@ -171,7 +171,7 @@ class PharmacyStaffController extends Controller
     public function expiringLicenses(Request $request)
     {
         $days = $request->input('days', 30);
-        
+
         $query = PharmacyStaff::with('pharmacy')
             ->whereNotNull('license_expiry')
             ->where('license_expiry', '<=', now()->addDays($days))
