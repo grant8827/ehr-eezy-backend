@@ -146,6 +146,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('messages', MessageController::class);
     Route::post('messages/{message}/read', [MessageController::class, 'markAsRead']);
     Route::get('messages/unread/count', [MessageController::class, 'unreadCount']);
+    Route::get('messages/conversations', [MessageController::class, 'conversations']);
+    Route::get('messages/available-users', [MessageController::class, 'availableUsers']);
 
     // Telehealth routes
     Route::apiResource('telehealth', TelehealthController::class);
