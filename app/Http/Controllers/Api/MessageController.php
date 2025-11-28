@@ -56,7 +56,7 @@ class MessageController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             // Get all unique conversation partners
             $conversations = Message::with(['sender', 'receiver'])
                 ->where(function($q) use ($user) {
@@ -66,20 +66,20 @@ class MessageController extends Controller
                 ->get()
                 ->groupBy(function($message) use ($user) {
                     // Group by the other participant in the conversation
-                    return $message->sender_id === $user->id 
-                        ? $message->receiver_id 
+                    return $message->sender_id === $user->id
+                        ? $message->receiver_id
                         : $message->sender_id;
                 })
                 ->map(function($messages, $participantId) use ($user) {
                     $latestMessage = $messages->sortByDesc('created_at')->first();
-                    $participant = $latestMessage->sender_id === $user->id 
-                        ? $latestMessage->receiver 
+                    $participant = $latestMessage->sender_id === $user->id
+                        ? $latestMessage->receiver
                         : $latestMessage->sender;
-                    
+
                     $unreadCount = $messages->where('receiver_id', $user->id)
                                            ->where('is_read', false)
                                            ->count();
-                    
+
                     return [
                         'participant_id' => $participantId,
                         'participant' => [
@@ -120,8 +120,8 @@ class MessageController extends Controller
         try {
             $user = Auth::user();
             $search = $request->get('search', '');
-            
-            $query = User::select('id', 'first_name', 'last_name', 'email', 'role')
+
+            $query = User::select('id', 'first_name', 'last_name', 'email', 'role', 'business_id')
                         ->where('id', '!=', $user->id)
                         ->where('is_active', true);
 
@@ -129,13 +129,38 @@ class MessageController extends Controller
             if ($user->role === 'patient') {
                 // Patients can message doctors, admins, and staff from their business
                 $patientRecord = Patient::where('user_id', $user->id)->first();
-                if ($patientRecord) {
-                    $query->where('business_id', $patientRecord->business_id)
-                          ->whereIn('role', ['doctor', 'admin', 'staff']);
+                if (!$patientRecord) {
+                    return response()->json([
+                        'success' => true,
+                        'data' => [],
+                        'message' => 'No patient record found'
+                    ]);
                 }
+
+                $query->where('business_id', $patientRecord->business_id)
+                      ->whereIn('role', ['doctor', 'admin', 'staff', 'nurse', 'therapist']);
             } else {
-                // Doctors, admins, staff can message patients and each other within their business
-                $query->where('business_id', $user->business_id);
+                // Doctors, admins, staff can message patients from their business and each other
+                $businessId = $user->business_id;
+                if (!$businessId) {
+                    return response()->json([
+                        'success' => true, 
+                        'data' => [],
+                        'message' => 'No business assigned to user'
+                    ]);
+                }
+
+                $query->where(function($q) use ($businessId) {
+                    // Users from same business
+                    $q->where('business_id', $businessId)
+                      // OR patients from same business
+                      ->orWhereExists(function($subQuery) use ($businessId) {
+                          $subQuery->select('id')
+                                   ->from('patients')
+                                   ->where('business_id', $businessId)
+                                   ->whereColumn('patients.user_id', 'users.id');
+                      });
+                });
             }
 
             // Search filter
@@ -147,7 +172,8 @@ class MessageController extends Controller
                 });
             }
 
-            $users = $query->orderBy('first_name')
+            $users = $query->orderBy('role')
+                          ->orderBy('first_name')
                           ->orderBy('last_name')
                           ->get()
                           ->map(function($user) {
@@ -237,7 +263,7 @@ class MessageController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             $message = Message::with(['sender', 'receiver', 'parentMessage', 'replies.sender'])
                              ->where(function($q) use ($user) {
                                  $q->where('sender_id', $user->id)
@@ -270,7 +296,7 @@ class MessageController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             $message = Message::where('receiver_id', $user->id)
                              ->findOrFail($id);
 
@@ -296,7 +322,7 @@ class MessageController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             $count = Message::where('receiver_id', $user->id)
                            ->where('is_read', false)
                            ->count();
@@ -321,7 +347,7 @@ class MessageController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             $message = Message::where('sender_id', $user->id)
                              ->findOrFail($id);
 
@@ -346,7 +372,7 @@ class MessageController extends Controller
     private function canUserMessage($sender, $receiverId)
     {
         $receiver = User::find($receiverId);
-        
+
         if (!$receiver) {
             return ['allowed' => false, 'reason' => 'Receiver not found'];
         }
@@ -357,27 +383,31 @@ class MessageController extends Controller
             if (!$patientRecord) {
                 return ['allowed' => false, 'reason' => 'Patient record not found'];
             }
-            
+
+            // Check if receiver is a healthcare provider from the same business
             if ($receiver->business_id !== $patientRecord->business_id) {
                 return ['allowed' => false, 'reason' => 'Cannot message users from different healthcare providers'];
             }
-            
-            if (!in_array($receiver->role, ['doctor', 'admin', 'staff'])) {
+
+            if (!in_array($receiver->role, ['doctor', 'admin', 'staff', 'nurse', 'therapist'])) {
                 return ['allowed' => false, 'reason' => 'Patients can only message healthcare providers'];
             }
         } else {
             // Doctors, admins, staff can message within their business
-            if ($receiver->business_id !== $sender->business_id && $receiver->role !== 'patient') {
-                return ['allowed' => false, 'reason' => 'Cannot message users from different organizations'];
-            }
-            
-            // For patients, check if they belong to the sender's business
+            $senderBusinessId = $sender->business_id;
+
             if ($receiver->role === 'patient') {
+                // Check if patient belongs to sender's business
                 $patientRecord = Patient::where('user_id', $receiver->id)
-                                       ->where('business_id', $sender->business_id)
+                                       ->where('business_id', $senderBusinessId)
                                        ->first();
                 if (!$patientRecord) {
                     return ['allowed' => false, 'reason' => 'Cannot message patients from different organizations'];
+                }
+            } else {
+                // Check if both staff/doctors are from same business
+                if ($receiver->business_id !== $senderBusinessId) {
+                    return ['allowed' => false, 'reason' => 'Cannot message users from different organizations'];
                 }
             }
         }
