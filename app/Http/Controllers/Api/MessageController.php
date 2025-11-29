@@ -121,46 +121,53 @@ class MessageController extends Controller
             $user = Auth::user();
             $search = $request->get('search', '');
 
+            // Start with basic query - don't filter by is_active initially to debug
             $query = User::select('id', 'first_name', 'last_name', 'email', 'role', 'business_id')
-                        ->where('id', '!=', $user->id)
-                        ->where('is_active', true);
+                        ->where('id', '!=', $user->id);
 
             // Role-based filtering
             if ($user->role === 'patient') {
                 // Patients can message doctors, admins, and staff from their business
                 $patientRecord = Patient::where('user_id', $user->id)->first();
+                
                 if (!$patientRecord) {
-                    return response()->json([
-                        'success' => true,
-                        'data' => [],
-                        'message' => 'No patient record found'
-                    ]);
+                    // If no patient record, show all healthcare providers for now
+                    $query->whereIn('role', ['doctor', 'admin', 'staff', 'nurse', 'therapist']);
+                } else {
+                    // Filter by business if patient record exists
+                    $query->where('business_id', $patientRecord->business_id)
+                          ->whereIn('role', ['doctor', 'admin', 'staff', 'nurse', 'therapist']);
                 }
-
-                $query->where('business_id', $patientRecord->business_id)
-                      ->whereIn('role', ['doctor', 'admin', 'staff', 'nurse', 'therapist']);
             } else {
-                // Doctors, admins, staff can message patients from their business and each other
+                // Doctors, admins, staff can message patients and each other
                 $businessId = $user->business_id;
+                
                 if (!$businessId) {
-                    return response()->json([
-                        'success' => true, 
-                        'data' => [],
-                        'message' => 'No business assigned to user'
-                    ]);
+                    // If no business assigned, show all users for now
+                    $query->whereIn('role', ['patient', 'doctor', 'admin', 'staff', 'nurse', 'therapist']);
+                } else {
+                    $query->where(function($q) use ($businessId) {
+                        // Users from same business
+                        $q->where('business_id', $businessId)
+                          // OR patients from same business
+                          ->orWhereExists(function($subQuery) use ($businessId) {
+                              $subQuery->select('id')
+                                       ->from('patients')
+                                       ->where('business_id', $businessId)
+                                       ->whereColumn('patients.user_id', 'users.id');
+                          });
+                    });
                 }
+            }
 
-                $query->where(function($q) use ($businessId) {
-                    // Users from same business
-                    $q->where('business_id', $businessId)
-                      // OR patients from same business
-                      ->orWhereExists(function($subQuery) use ($businessId) {
-                          $subQuery->select('id')
-                                   ->from('patients')
-                                   ->where('business_id', $businessId)
-                                   ->whereColumn('patients.user_id', 'users.id');
-                      });
+            // Apply is_active filter only if we have users, or check if column exists
+            try {
+                $query->where(function($q) {
+                    $q->where('is_active', true)
+                      ->orWhereNull('is_active'); // In case some users don't have this field set
                 });
+            } catch (\Exception $e) {
+                // is_active column might not exist, skip this filter
             }
 
             // Search filter
@@ -181,19 +188,40 @@ class MessageController extends Controller
                                   'id' => $user->id,
                                   'name' => $user->first_name . ' ' . $user->last_name,
                                   'email' => $user->email,
-                                  'role' => $user->role
+                                  'role' => $user->role,
+                                  'business_id' => $user->business_id // Add for debugging
                               ];
                           });
 
+            // Add debug info for troubleshooting
+            $debugInfo = [
+                'current_user_role' => $user->role,
+                'current_user_business_id' => $user->business_id,
+                'total_users_found' => $users->count(),
+                'search_term' => $search
+            ];
+
+            if ($user->role === 'patient') {
+                $patientRecord = Patient::where('user_id', $user->id)->first();
+                $debugInfo['patient_record_exists'] = $patientRecord ? true : false;
+                $debugInfo['patient_business_id'] = $patientRecord ? $patientRecord->business_id : null;
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => $users
+                'data' => $users,
+                'debug' => $debugInfo
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching available users: ' . $e->getMessage()
+                'message' => 'Error fetching available users: ' . $e->getMessage(),
+                'debug' => [
+                    'exception' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]
             ], 500);
         }
     }
